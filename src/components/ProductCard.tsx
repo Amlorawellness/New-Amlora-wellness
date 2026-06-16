@@ -9,6 +9,11 @@ import { useCart } from "../context/CartContext";
 import { ShoppingCart, RefreshCw, Eye, CheckCircle, Info, Star } from "lucide-react";
 import AmloraLogo from "./AmloraLogo";
 
+// Import images directly as modules so Vite correctly compiles and resolves them in the production build
+import amlaPowderPkg from "../assets/images/amla_powder_packaging_1781600016813.jpg";
+import amlaCandyPkg from "../assets/images/amla_candy_packaging_1781599999918.jpg";
+import amlaCubesPkg from "../assets/images/amla_cubes_packaging_1781600033441.jpg";
+
 interface ProductCardProps {
   product: Product;
   key?: string;
@@ -21,10 +26,10 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   const renderPackagingMockup = () => {
     const imgSrc = product.id === "amla-powder" 
-      ? "/src/assets/images/amla_powder_packaging_1781600016813.jpg"
+      ? amlaPowderPkg
       : product.id === "amla-candy"
-        ? "/src/assets/images/amla_candy_packaging_1781599999918.jpg"
-        : "/src/assets/images/amla_cubes_packaging_1781600033441.jpg";
+        ? amlaCandyPkg
+        : amlaCubesPkg;
 
     const showBack = activeTab === "nutrition" || activeTab === "directions";
 

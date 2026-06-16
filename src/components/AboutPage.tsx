@@ -7,6 +7,9 @@ import React from "react";
 import { Award, Compass, Heart, Map, Quote, Sprout, ShieldCheck } from "lucide-react";
 import LoyaltyProgram from "./LoyaltyProgram";
 
+// Import images directly as modules so Vite correctly compiles and resolves them in the production build
+import freshAmlaHeritageImg from "../assets/images/fresh_amla_heritage_1781511324463.jpg";
+
 export default function AboutPage() {
   return (
     <div className="bg-[#FAF9F5] text-[#0F3D2E] pt-24">
@@ -61,7 +64,7 @@ export default function AboutPage() {
           <div className="border border-[#0F3D2E]/10 bg-white p-4 shadow-xl hover:border-[#D4AF37]/35 transition-colors group">
             <div className="aspect-[4/3] overflow-hidden bg-gray-50 border border-gray-150 relative">
               <img
-                src="/src/assets/images/fresh_amla_heritage_1781511324463.jpg"
+                src={freshAmlaHeritageImg}
                 alt="Generational fresh amla harvest"
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 referrerPolicy="no-referrer"

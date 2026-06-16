@@ -7,6 +7,9 @@ import React, { useState } from "react";
 import { Zap, Shield, Flame, Sparkles, Heart, Activity, Plus, Minus, Info, Clipboard, Activity as MuscleIcon, Eye, CheckCircle2 } from "lucide-react";
 import AmlaIllustration from "./AmlaIllustration";
 
+// Import images directly as modules so Vite correctly compiles and resolves them in the production build
+import freshAmlaHeritageImg from "../assets/images/fresh_amla_heritage_1781511324463.jpg";
+
 interface BotanicalSystem {
   id: string;
   name: string;
@@ -220,7 +223,7 @@ export default function WhyAmla() {
               <div className="relative z-10 transition-transform duration-500 hover:scale-105 flex flex-col items-center">
                 <div className="w-[180px] h-[180px] rounded-full overflow-hidden border-4 border-[#D4AF37] shadow-xl relative bg-[#0F3D2E]/5">
                   <img 
-                    src="/src/assets/images/fresh_amla_heritage_1781511324463.jpg" 
+                    src={freshAmlaHeritageImg} 
                     alt="Genuine Sourced Pratapgarh Amla"
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"

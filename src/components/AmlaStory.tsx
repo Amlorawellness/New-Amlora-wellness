@@ -6,6 +6,9 @@
 import React from "react";
 import { BookOpen, MapPin, Wine, Calendar, Heart } from "lucide-react";
 
+// Import images directly as modules so Vite correctly compiles and resolves them in the production build
+import amloraWellnessStoryImg from "../assets/images/amlora_wellness_story_1781518791172.jpg";
+
 export default function AmlaStory() {
   const timelineSteps = [
     {
@@ -75,7 +78,7 @@ export default function AmlaStory() {
             <div className="border border-[#0F3D2E]/10 bg-white p-4 shadow-md hover:border-[#D4AF37]/45 transition-colors group">
               <div className="aspect-[4/3] overflow-hidden bg-gray-50 border border-gray-150 relative">
                 <img
-                  src="/src/assets/images/amlora_wellness_story_1781518791172.jpg"
+                  src={amloraWellnessStoryImg}
                   alt="Amlora Wellness Sourced Fresh Amla and Premium Elixir"
                   className="w-full h-full object-cover grayscale-[20%] opacity-95 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700"
                   referrerPolicy="no-referrer"

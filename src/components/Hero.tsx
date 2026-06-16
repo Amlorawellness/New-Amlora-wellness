@@ -7,7 +7,8 @@ import React from "react";
 import AmlaIllustration from "./AmlaIllustration";
 import { ArrowRight, Leaf, Shield, Award } from "lucide-react";
 
-const freshAmlaImg = "/src/assets/images/fresh_amla_heritage_1781511324463.jpg";
+// Import images directly as modules so Vite correctly compiles and resolves them in the production build
+import freshAmlaImg from "../assets/images/fresh_amla_heritage_1781511324463.jpg";
 
 interface HeroProps {
   setActiveTab?: (tab: string) => void;
