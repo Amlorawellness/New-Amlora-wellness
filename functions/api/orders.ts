@@ -76,7 +76,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: a
     if (isSmtpConfigured) {
       console.log("[SMTP SEND START - CLOUDFLARE] Lazy-load nodemailer module for dynamic dispatch...");
       try {
-        const nodemailer = await import("nodemailer");
+        const nodemailerModuleName = "nodemailer";
+        const nodemailer = await import(nodemailerModuleName);
         const transporter = nodemailer.createTransport({
           host: smtpHost,
           port: Number(smtpPort || 587),
