@@ -7,8 +7,29 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+try {
+  fs.appendFileSync(path.join(process.cwd(), "server_status.log"), `Server execution triggered at ${new Date().toISOString()}\n`);
+} catch (logErr) {
+  console.error("Diagnostic file log failing:", logErr);
+}
+
 const app = express();
 const PORT = 3000;
+
+// Request logging middleware
+app.use((req, res, next) => {
+  const logMsg = `[REQUEST LOG] ${new Date().toISOString()} - ${req.method} ${req.url}\n`;
+  console.log(logMsg.trim());
+  try {
+    fs.appendFileSync(path.join(process.cwd(), "server_status.log"), logMsg);
+  } catch (err) {}
+  next();
+});
+
+app.get("/api/test", (req, res) => {
+  console.log("[DEBUG] /api/test called");
+  return res.json({ ok: true });
+});
 
 // Body parser
 app.use(express.json());
@@ -353,6 +374,11 @@ async function bootstrap() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`SERVER: Active and listening securely on http://localhost:${PORT}`);
+    try {
+      fs.appendFileSync(path.join(process.cwd(), "server_status.log"), `Server successfully listening on port ${PORT} at ${new Date().toISOString()}\n`);
+    } catch (logErr) {
+      console.error("Diagnostic file log failing:", logErr);
+    }
   });
 }
 
