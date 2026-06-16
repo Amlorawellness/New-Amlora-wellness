@@ -78,35 +78,41 @@ export default function CartDrawer() {
 
       console.log("[DEBUG] Server Response received. Status:", response.status, "StatusText:", response.statusText);
 
-      // 8. Handle non-ok responses safely without crash-parsing empty lines
-      if (!response.ok) {
-        console.error("[DEBUG] Network error status detected:", response.status);
-        throw new Error("Order submission failed");
-      }
-
-      // 7. Add frontend validation before calling response.json()
+      // Read Content-Type to safely choose JSON or text parsing
       const contentType = response.headers.get("Content-Type") || "";
-      if (!contentType.includes("application/json")) {
-        console.error("[DEBUG] Received non-JSON Content-Type header:", contentType);
-        throw new Error("Receipt of malformed non-JSON response from server.");
+      let responseData: any = null;
+
+      if (contentType.includes("application/json")) {
+        try {
+          responseData = await response.json();
+          console.log("[DEBUG] Backend response JSON parsed:", responseData);
+        } catch (jsonErr: any) {
+          console.error("[DEBUG] Failed to parse JSON response:", jsonErr);
+        }
+      } else {
+        try {
+          const rawText = await response.text();
+          console.log("[DEBUG] Backend response plain text:", rawText);
+          responseData = { success: false, error: rawText };
+        } catch (textErr: any) {
+          console.error("[DEBUG] Failed to parse text response:", textErr);
+        }
       }
 
-      let data: any;
-      try {
-        data = await response.json();
-        console.log("[DEBUG] Backend response JSON parsed successfully:", data);
-      } catch (jsonErr: any) {
-        console.error("[DEBUG] Fail to parse response JSON body:", jsonErr);
-        throw new Error("Failed to parse order receipt details from server.");
+      // Check if response was successful
+      if (!response.ok) {
+        console.error("[DEBUG] Server returned non-ok status:", response.status);
+        const errorMsg = responseData?.error || responseData?.message || "Order submission failed (Status Code: " + response.status + ")";
+        throw new Error(errorMsg);
       }
 
-      if (data && data.success) {
-        setOrderId(data.orderId || "AML-COD-GEN");
+      if (responseData && responseData.success) {
+        setOrderId(responseData.orderId || "AML-COD-GEN");
         setRazorpayId(rzpId || "");
-        setServerDeliveryStatus(data);
+        setServerDeliveryStatus(responseData);
         setOrderCompleted(true);
       } else {
-        throw new Error(data?.error || "Server could not process order");
+        throw new Error(responseData?.error || responseData?.message || "Server could not process order");
       }
     } catch (err: any) {
       console.error("[DEBUG] Detailed Checkout Execution Error:", err);

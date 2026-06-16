@@ -312,7 +312,7 @@ app.post("/api/orders", async (req, res) => {
     const finalMessage = emailSuccess ? "Order placed successfully" : "Order received but email notification failed";
 
     // Respond back to frontend with full status summary
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: finalMessage,
       orderId,
@@ -323,23 +323,13 @@ app.post("/api/orders", async (req, res) => {
       orderSummary: newOrder
     });
 
-    return Response.json({
-      success: true,
-      message: finalMessage
-    });
-
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message,
       stack: error.stack
     });
-    return Response.json({
-      success: false,
-      error: error.message,
-      stack: error.stack
-    }, { status: 500 });
   }
 });
 
