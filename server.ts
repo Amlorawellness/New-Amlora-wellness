@@ -280,69 +280,95 @@ app.post("/api/orders", async (req, res) => {
     let adminMailSent = false;
     let mailErrorDiagnostic = "";
 
-    // Read SMTP secrets or fallback to simulated mail logs if not set up
-    const isSmtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
+    // Check & Log Environment Variables (without exposing pass)
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = process.env.SMTP_PORT;
+    const smtpSecure = process.env.SMTP_SECURE;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const smtpFrom = process.env.SMTP_FROM;
+
+    console.log("[SMTP CONFIG VERIFICATION] Verifying environment variables...");
+    console.log(`- SMTP_HOST: ${smtpHost ? `"${smtpHost}"` : "MISSING (Verify configuration)"}`);
+    console.log(`- SMTP_PORT: ${smtpPort ? `"${smtpPort}"` : "MISSING (Verify configuration)"}`);
+    console.log(`- SMTP_SECURE: ${smtpSecure ? `"${smtpSecure}"` : "MISSING (Verify configuration)"}`);
+    console.log(`- SMTP_USER: ${smtpUser ? `"${smtpUser}"` : "MISSING (Verify configuration)"}`);
+    console.log(`- SMTP_PASS: ${smtpPass ? `DEFINED (length: ${smtpPass.length})` : "MISSING (Verify configuration)"}`);
+    console.log(`- SMTP_FROM: ${smtpFrom ? `"${smtpFrom}"` : "MISSING (Verify configuration)"}`);
+
+    const isSmtpConfigured = !!(smtpHost && smtpUser && smtpPass);
 
     if (isSmtpConfigured) {
-      console.log("Email sending started");
+      console.log("[SMTP SEND START] Creating transporter to connect to secure mail server...");
       try {
         const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT || 587),
-          secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
+          host: smtpHost,
+          port: Number(smtpPort || 587),
+          secure: smtpSecure === "true", // true for 465, false for other ports
           auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
+            user: smtpUser,
+            pass: smtpPass,
           },
         });
 
-        // Send to Customer
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Amlora Wellness" <${process.env.SMTP_USER}>`,
+        // Test SMTP Connection before sending email
+        console.log("[SMTP CONNECTION STATUS] Authenticating & testing connection to SMTP server...");
+        await transporter.verify();
+        console.log("[SMTP CONNECTION STATUS] SMTP Connection Verified Successfully!");
+
+        // Send customer email to the email entered during checkout
+        const customerMailOptions = {
+          from: smtpFrom || `"Amlora Wellness" <${smtpUser}>`,
           to: email,
           subject: "Your Amlora Wellness Order Has Been Confirmed",
           html: customerEmailHtml,
-        });
+        };
+        console.log(`[SMTP SEND START] Dispatching confirmation email to customer at: ${email}`);
+        await transporter.sendMail(customerMailOptions);
         customerMailSent = true;
+        console.log(`[SMTP SEND SUCCESS] Customer confirmation email sent successfully to ${email}`);
 
-        // Send to Admin
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Amlora Sourcing Alert" <${process.env.SMTP_USER}>`,
+        // Send admin email to info@amlorawellness.com
+        const adminMailOptions = {
+          from: smtpFrom || `"Amlora Sourcing Alert" <${smtpUser}>`,
           to: "info@amlorawellness.com",
           subject: "New Order Received - Amlora Wellness",
           html: adminEmailHtml,
-        });
+        };
+        console.log(`[SMTP SEND START] Dispatching alert email to admin at: info@amlorawellness.com`);
+        await transporter.sendMail(adminMailOptions);
         adminMailSent = true;
+        console.log(`[SMTP SEND SUCCESS] Admin alert email sent successfully to info@amlorawellness.com`);
 
-        console.log("Email sent successfully");
-        console.log(`REAL MAIL DISPATCH SUCCESS: Info sent securely to user & admin desk for order ${orderId}`);
       } catch (mailErr: any) {
-        console.error(mailErr);
-        mailErrorDiagnostic = mailErr.message || "Unknown SMTP error";
+        console.error("[SMTP SEND FAILURE] Email pipeline error caught!");
+        console.error("Exact SMTP Error:", mailErr);
+        mailErrorDiagnostic = mailErr.stack || mailErr.message || String(mailErr);
       }
     } else {
-      console.log(`*** SANDBOX MODE (Pending SMTP Env Keys) ***`);
-      console.log(`SUBJECT: "Your Amlora Wellness Order Has Been Confirmed" dispatched to: ${email}`);
-      console.log(`SUBJECT: "New Order Received - Amlora Wellness" dispatched to: info@amlorawellness.com`);
-      customerMailSent = true;
-      adminMailSent = true;
+      console.warn("[SMTP CONFIG VERIFICATION] FAILED: Missing one or more required SMTP variables.");
+      mailErrorDiagnostic = "SMTP parameters are not fully configured in environment.";
     }
 
-    // Determine final message based on email dispatch status
-    const emailSuccess = customerMailSent && adminMailSent;
-    const finalMessage = emailSuccess ? "Order placed successfully" : "Order received but email notification failed";
-
-    // Respond back to frontend with full status summary
-    return res.status(200).json({
-      success: true,
-      message: finalMessage,
-      orderId,
-      customerMailSent,
-      adminMailSent,
-      isSimulated: !isSmtpConfigured,
-      mailError: mailErrorDiagnostic || null,
-      orderSummary: newOrder
-    });
+    // Return status based on success/failure of email notification
+    if (customerMailSent && adminMailSent) {
+      return res.status(200).json({
+        success: true,
+        orderCreated: true,
+        adminEmailSent: true,
+        customerEmailSent: true,
+        orderId,
+        orderSummary: newOrder
+      });
+    } else {
+      return res.status(200).json({
+        success: true,
+        orderCreated: true,
+        emailError: mailErrorDiagnostic || "Email dispatch unsuccessful.",
+        orderId,
+        orderSummary: newOrder
+      });
+    }
 
   } catch (error: any) {
     console.error(error);

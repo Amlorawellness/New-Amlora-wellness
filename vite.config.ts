@@ -104,21 +104,42 @@ export default defineConfig(() => {
                 let customerMailSent = false;
                 let adminMailSent = false;
                 let mailErrorDiagnostic = "";
-                const isSmtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
 
-                console.log("Email sending started");
+                // Check & Log Environment Variables (without exposing pass)
+                const smtpHost = process.env.SMTP_HOST;
+                const smtpPort = process.env.SMTP_PORT;
+                const smtpSecure = process.env.SMTP_SECURE;
+                const smtpUser = process.env.SMTP_USER;
+                const smtpPass = process.env.SMTP_PASS;
+                const smtpFrom = process.env.SMTP_FROM;
+
+                console.log("[SMTP CONFIG VERIFICATION - VITE DEV] Verifying environment variables...");
+                console.log(`- SMTP_HOST: ${smtpHost ? `"${smtpHost}"` : "MISSING (Verify configuration)"}`);
+                console.log(`- SMTP_PORT: ${smtpPort ? `"${smtpPort}"` : "MISSING (Verify configuration)"}`);
+                console.log(`- SMTP_SECURE: ${smtpSecure ? `"${smtpSecure}"` : "MISSING (Verify configuration)"}`);
+                console.log(`- SMTP_USER: ${smtpUser ? `"${smtpUser}"` : "MISSING (Verify configuration)"}`);
+                console.log(`- SMTP_PASS: ${smtpPass ? `DEFINED (length: ${smtpPass.length})` : "MISSING (Verify configuration)"}`);
+                console.log(`- SMTP_FROM: ${smtpFrom ? `"${smtpFrom}"` : "MISSING (Verify configuration)"}`);
+
+                const isSmtpConfigured = !!(smtpHost && smtpUser && smtpPass);
 
                 if (isSmtpConfigured) {
+                  console.log("[SMTP SEND START - VITE DEV] Creating transporter to connect to secure mail server...");
                   try {
                     const transporter = nodemailer.createTransport({
-                      host: process.env.SMTP_HOST,
-                      port: Number(process.env.SMTP_PORT || 587),
-                      secure: process.env.SMTP_SECURE === "true",
+                      host: smtpHost,
+                      port: Number(smtpPort || 587),
+                      secure: smtpSecure === "true",
                       auth: {
-                        user: process.env.SMTP_USER,
-                        pass: process.env.SMTP_PASS,
+                        user: smtpUser,
+                        pass: smtpPass,
                       },
                     });
+
+                    // Test SMTP Connection before sending email
+                    console.log("[SMTP CONNECTION STATUS - VITE DEV] Authenticating & testing connection to SMTP server...");
+                    await transporter.verify();
+                    console.log("[SMTP CONNECTION STATUS - VITE DEV] SMTP Connection Verified Successfully!");
 
                     // Build standard layout HTML emails (matches server.ts layout)
                     const productListHtml = newOrder.items.map((item: any) => `
@@ -211,49 +232,60 @@ export default defineConfig(() => {
                       </div>
                     `;
 
+                    // Send customer email to the email entered during checkout
+                    console.log(`[SMTP SEND START - VITE DEV] Dispatching confirmation email to customer at: ${email}`);
                     await transporter.sendMail({
-                      from: process.env.SMTP_FROM || `"Amlora Wellness" <${process.env.SMTP_USER}>`,
+                      from: smtpFrom || `"Amlora Wellness" <${smtpUser}>`,
                       to: email,
                       subject: "Your Amlora Wellness Order Has Been Confirmed",
                       html: customerEmailHtml,
                     });
                     customerMailSent = true;
+                    console.log(`[SMTP SEND SUCCESS - VITE DEV] Customer confirmation email sent successfully to ${email}`);
 
+                    // Send admin email to info@amlorawellness.com
                     const adminEmailHtml = `<h3>New Order Received - ${orderId} from ${name} of ₹${cartTotal}</h3>`;
+                    console.log(`[SMTP SEND START - VITE DEV] Dispatching alert email to admin at: info@amlorawellness.com`);
                     await transporter.sendMail({
-                      from: process.env.SMTP_FROM || `"Amlora Sourcing Alert" <${process.env.SMTP_USER}>`,
+                      from: smtpFrom || `"Amlora Sourcing Alert" <${smtpUser}>`,
                       to: "info@amlorawellness.com",
                       subject: "New Order Received - Amlora Wellness",
                       html: adminEmailHtml,
                     });
                     adminMailSent = true;
+                    console.log(`[SMTP SEND SUCCESS - VITE DEV] Admin alert email sent successfully to info@amlorawellness.com`);
 
-                    console.log("Email sent successfully");
                   } catch (mailErr: any) {
-                    console.error(mailErr);
-                    mailErrorDiagnostic = mailErr.message || "Unknown SMTP error";
+                    console.error("[SMTP SEND FAILURE - VITE DEV] Email pipeline error caught!");
+                    console.error("Exact SMTP Error:", mailErr);
+                    mailErrorDiagnostic = mailErr.stack || mailErr.message || String(mailErr);
                   }
                 } else {
-                  console.log("Email sent successfully");
-                  customerMailSent = true;
-                  adminMailSent = true;
+                  console.warn("[SMTP CONFIG VERIFICATION - VITE DEV] FAILED: Missing one or more required SMTP variables.");
+                  mailErrorDiagnostic = "SMTP parameters are not fully configured.";
                 }
-
-                const emailSuccess = customerMailSent && adminMailSent;
-                const finalMessage = emailSuccess ? "Order placed successfully" : "Order received but email notification failed";
 
                 res.statusCode = 200;
                 res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({
-                  success: true,
-                  message: finalMessage,
-                  orderId,
-                  customerMailSent,
-                  adminMailSent,
-                  isSimulated: !isSmtpConfigured,
-                  mailError: mailErrorDiagnostic || null,
-                  orderSummary: newOrder
-                }));
+
+                if (customerMailSent && adminMailSent) {
+                  res.end(JSON.stringify({
+                    success: true,
+                    orderCreated: true,
+                    adminEmailSent: true,
+                    customerEmailSent: true,
+                    orderId,
+                    orderSummary: newOrder
+                  }));
+                } else {
+                  res.end(JSON.stringify({
+                    success: true,
+                    orderCreated: true,
+                    emailError: mailErrorDiagnostic || "Email dispatch unsuccessful.",
+                    orderId,
+                    orderSummary: newOrder
+                  }));
+                }
               } catch (error: any) {
                 console.error(error);
                 res.statusCode = 500;
