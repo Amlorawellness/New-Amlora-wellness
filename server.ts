@@ -302,8 +302,9 @@ app.post("/api/orders", async (req, res) => {
     }
 
     // Respond back to frontend with full status summary
-    return res.json({
+    res.status(200).json({
       success: true,
+      message: "Order placed successfully",
       orderId,
       customerMailSent,
       adminMailSent,
@@ -312,9 +313,21 @@ app.post("/api/orders", async (req, res) => {
       orderSummary: newOrder
     });
 
+    return Response.json({
+      success: true,
+      message: "Order placed successfully"
+    });
+
   } catch (error: any) {
     console.error("Order process crash:", error);
-    return res.status(500).json({ success: false, error: error.message || "Internal server crash during placement" });
+    res.status(500).json({
+      success: false,
+      error: error.message || "Internal server crash during placement"
+    });
+    return Response.json({
+      success: false,
+      error: error.message
+    }, { status: 500 });
   }
 });
 

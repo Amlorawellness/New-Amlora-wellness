@@ -55,6 +55,11 @@ export default function CartDrawer() {
   const [serverDeliveryStatus, setServerDeliveryStatus] = useState<any>(null);
 
   const submitOrderToServer = async (pMethod: "razorpay" | "cod", rzpId?: string) => {
+    console.log("[DEBUG] Initiating order submission to server. Method:", pMethod, "Razorpay ID:", rzpId);
+    console.log("[DEBUG] Shipping Details:", formData);
+    console.log("[DEBUG] Cart Items:", cartItems);
+    console.log("[DEBUG] Cart Total Amount: ₹", cartTotal);
+
     try {
       setIsSubmitting(true);
       const response = await fetch("/api/orders", {
@@ -70,17 +75,41 @@ export default function CartDrawer() {
           razorpayId: rzpId || ""
         })
       });
-      const data = await response.json();
-      if (data.success) {
-        setOrderId(data.orderId);
+
+      console.log("[DEBUG] Server Response received. Status:", response.status, "StatusText:", response.statusText);
+
+      // 8. Handle non-ok responses safely without crash-parsing empty lines
+      if (!response.ok) {
+        console.error("[DEBUG] Network error status detected:", response.status);
+        throw new Error("Order submission failed");
+      }
+
+      // 7. Add frontend validation before calling response.json()
+      const contentType = response.headers.get("Content-Type") || "";
+      if (!contentType.includes("application/json")) {
+        console.error("[DEBUG] Received non-JSON Content-Type header:", contentType);
+        throw new Error("Receipt of malformed non-JSON response from server.");
+      }
+
+      let data: any;
+      try {
+        data = await response.json();
+        console.log("[DEBUG] Backend response JSON parsed successfully:", data);
+      } catch (jsonErr: any) {
+        console.error("[DEBUG] Fail to parse response JSON body:", jsonErr);
+        throw new Error("Failed to parse order receipt details from server.");
+      }
+
+      if (data && data.success) {
+        setOrderId(data.orderId || "AML-COD-GEN");
         setRazorpayId(rzpId || "");
         setServerDeliveryStatus(data);
         setOrderCompleted(true);
       } else {
-        throw new Error(data.error || "Server could not process order");
+        throw new Error(data?.error || "Server could not process order");
       }
     } catch (err: any) {
-      console.error("Order API Error:", err);
+      console.error("[DEBUG] Detailed Checkout Execution Error:", err);
       alert("Order placement alert: " + err.message);
     } finally {
       setIsSubmitting(false);
