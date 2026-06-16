@@ -30,16 +30,20 @@ function generateOrderId(mSymbol = "AML"): string {
 
 // API Route: Place/Submit Order
 app.post("/api/orders", async (req, res) => {
+  console.log("Order received");
+  console.log("[DEBUG] Received body payload:", JSON.stringify(req.body));
   try {
     const { formData, cartItems, cartTotal, paymentMethod, razorpayId } = req.body;
 
     // Server-side validation
     if (!formData || !cartItems || !cartItems.length) {
+      console.warn("[DEBUG] Missing required order data arrays or customer details.");
       return res.status(400).json({ success: false, error: "Missing required order data" });
     }
 
     const { name, phone, email, address, city, state, pincode } = formData;
     if (!name || !phone || !email || !address || !city || !state || !pincode) {
+      console.warn("[DEBUG] Missing one or more shipping information parameters.");
       return res.status(400).json({ success: false, error: "Missing required shipping information" });
     }
 
@@ -259,6 +263,7 @@ app.post("/api/orders", async (req, res) => {
     const isSmtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
 
     if (isSmtpConfigured) {
+      console.log("Email sending started");
       try {
         const transporter = nodemailer.createTransport({
           host: process.env.SMTP_HOST,
@@ -288,9 +293,10 @@ app.post("/api/orders", async (req, res) => {
         });
         adminMailSent = true;
 
+        console.log("Email sent successfully");
         console.log(`REAL MAIL DISPATCH SUCCESS: Info sent securely to user & admin desk for order ${orderId}`);
       } catch (mailErr: any) {
-        console.error("REAL SMTP MAIL ERROR: ", mailErr);
+        console.error(mailErr);
         mailErrorDiagnostic = mailErr.message || "Unknown SMTP error";
       }
     } else {
@@ -301,10 +307,14 @@ app.post("/api/orders", async (req, res) => {
       adminMailSent = true;
     }
 
+    // Determine final message based on email dispatch status
+    const emailSuccess = customerMailSent && adminMailSent;
+    const finalMessage = emailSuccess ? "Order placed successfully" : "Order received but email notification failed";
+
     // Respond back to frontend with full status summary
     res.status(200).json({
       success: true,
-      message: "Order placed successfully",
+      message: finalMessage,
       orderId,
       customerMailSent,
       adminMailSent,
@@ -315,18 +325,20 @@ app.post("/api/orders", async (req, res) => {
 
     return Response.json({
       success: true,
-      message: "Order placed successfully"
+      message: finalMessage
     });
 
   } catch (error: any) {
-    console.error("Order process crash:", error);
+    console.error(error);
     res.status(500).json({
       success: false,
-      error: error.message || "Internal server crash during placement"
+      error: error.message,
+      stack: error.stack
     });
     return Response.json({
       success: false,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     }, { status: 500 });
   }
 });
