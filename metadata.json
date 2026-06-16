@@ -1,0 +1,6 @@
+{
+  "name": "Amlora Wellness",
+  "description": "Premium Amla-focused wellness destination bringing India's heritage superfruit products into modern daily lifestyles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
