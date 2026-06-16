@@ -41,6 +41,7 @@ export default function CartDrawer() {
     email: "",
     address: "",
     city: "",
+    state: "",
     pincode: "",
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -51,6 +52,40 @@ export default function CartDrawer() {
   const [razorpayId, setRazorpayId] = useState("");
   const [sandboxActive, setSandboxActive] = useState(false);
   const [mockPaymentId, setMockPaymentId] = useState("");
+  const [serverDeliveryStatus, setServerDeliveryStatus] = useState<any>(null);
+
+  const submitOrderToServer = async (pMethod: "razorpay" | "cod", rzpId?: string) => {
+    try {
+      setIsSubmitting(true);
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          formData,
+          cartItems,
+          cartTotal,
+          paymentMethod: pMethod,
+          razorpayId: rzpId || ""
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setOrderId(data.orderId);
+        setRazorpayId(rzpId || "");
+        setServerDeliveryStatus(data);
+        setOrderCompleted(true);
+      } else {
+        throw new Error(data.error || "Server could not process order");
+      }
+    } catch (err: any) {
+      console.error("Order API Error:", err);
+      alert("Order placement alert: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const loadRazorpayScript = () => {
     return new Promise<boolean>((resolve) => {
@@ -106,6 +141,7 @@ export default function CartDrawer() {
     }
     if (!formData.address.trim()) errors.address = "Complete address is required";
     if (!formData.city.trim()) errors.city = "City / District is required";
+    if (!formData.state.trim()) errors.state = "State is required";
     if (!formData.pincode.trim()) {
       errors.pincode = "6-digit Pincode is required";
     } else if (!/^[1-9][0-9]{5}$/.test(formData.pincode.trim())) {
@@ -119,16 +155,8 @@ export default function CartDrawer() {
     e.preventDefault();
     if (!validateForm()) return;
 
-    setIsSubmitting(true);
-    setSandboxActive(false);
-
     if (paymentMethod === "cod") {
-      // Direct placement for Cash on Delivery
-      setTimeout(() => {
-        setIsSubmitting(false);
-        setOrderId("AML-COD-" + Math.floor(100000 + Math.random() * 900000));
-        setOrderCompleted(true);
-      }, 1200);
+      await submitOrderToServer("cod");
       return;
     }
 
@@ -136,6 +164,7 @@ export default function CartDrawer() {
     const scriptLoaded = await loadRazorpayScript();
     if (!scriptLoaded) {
       console.warn("Razorpay script load failed or blocked inside iframe. Loading secure simulator.");
+      setIsSubmitting(true);
       setTimeout(() => {
         setIsSubmitting(false);
         setSandboxActive(true);
@@ -144,6 +173,7 @@ export default function CartDrawer() {
     }
 
     try {
+      setIsSubmitting(true);
       const options = {
         key: "rzp_test_AMLaWeLlNeSs", // Ready-to-use secure public test key
         amount: cartTotal * 100, // in paise
@@ -151,11 +181,9 @@ export default function CartDrawer() {
         name: "Amlora Wellness",
         description: "Pure Seedless Pratapgarh Amla Sourcing",
         image: "https://ais-dev-rugvp6t5nipjfuxavn5dk5-999214323378.asia-southeast1.run.app/favicon.ico",
-        handler: function (response: any) {
-          setIsSubmitting(false);
-          setRazorpayId(response.razorpay_payment_id || ("pay_mock_" + Math.random().toString(36).substr(2, 9)));
-          setOrderId("AML-RZP-" + Math.floor(100000 + Math.random() * 900000));
-          setOrderCompleted(true);
+        handler: async function (response: any) {
+          const checkPaymentId = response.razorpay_payment_id || ("pay_mock_" + Math.random().toString(36).substr(2, 9));
+          await submitOrderToServer("razorpay", checkPaymentId);
         },
         prefill: {
           name: formData.name,
@@ -165,6 +193,7 @@ export default function CartDrawer() {
         notes: {
           address: formData.address,
           city: formData.city,
+          state: formData.state,
           pincode: formData.pincode,
           order_items: cartItems.map(item => `${item.product.name} x${item.quantity}`).join(", ")
         },
@@ -186,10 +215,8 @@ export default function CartDrawer() {
       rzp.open();
     } catch (err) {
       console.error("Razorpay popup launch blocked in sandbox. Safe sandbox bypass triggered.", err);
-      setTimeout(() => {
-        setIsSubmitting(false);
-        setSandboxActive(true);
-      }, 800);
+      setIsSubmitting(false);
+      setSandboxActive(true);
     }
   };
 
@@ -484,15 +511,10 @@ export default function CartDrawer() {
                     ABORT PAY
                   </button>
                   <button
-                    onClick={() => {
-                      setIsSubmitting(true);
-                      setTimeout(() => {
-                        setOrderId("AML-RZP-" + Math.floor(100000 + Math.random() * 900000));
-                        setRazorpayId(mockPaymentId.trim() || ("pay_mock_" + Math.random().toString(36).substr(2, 9)));
-                        setOrderCompleted(true);
-                        setSandboxActive(false);
-                        setIsSubmitting(false);
-                      }, 1000);
+                    onClick={async () => {
+                      const checkPaymentId = mockPaymentId.trim() || ("pay_mock_" + Math.random().toString(36).substr(2, 9));
+                      setSandboxActive(false);
+                      await submitOrderToServer("razorpay", checkPaymentId);
                     }}
                     className="flex-1 bg-[#0F3D2E] hover:bg-[#154d3b] text-[#D4AF37] font-bold py-3 text-xs tracking-widest rounded-xl transition-all shadow-md text-center cursor-pointer border-0"
                   >
@@ -508,9 +530,41 @@ export default function CartDrawer() {
                 </div>
                 <div className="space-y-2">
                   <h4 className="text-2xl font-serif text-forest">Order Placed Successfully!</h4>
-                  <p className="text-sm text-gray-600 max-w-sm mx-auto">
-                    Thank you for choosing Amlora Wellness. Your transaction is securely authenticated and scheduled.
+                  <p className="text-sm text-forest font-medium max-w-sm mx-auto bg-green-50 rounded-xl p-3.5 border border-forest/15 leading-relaxed">
+                    Thank you for choosing Amlora Wellness. Your order has been received successfully.
                   </p>
+                </div>
+
+                {/* Real-Time Automated Order Communications Alerts */}
+                <div className="bg-emerald-rich/5 border border-emerald-rich/15 rounded-xl p-4 max-w-sm mx-auto text-left space-y-3">
+                  <h5 className="text-[11px] font-bold uppercase tracking-widest text-[#0F3D2E] border-b border-[#0F3D2E]/10 pb-1 flex items-center gap-1.5 font-sans">
+                    <span>📡</span> Dispatch Status Alerts
+                  </h5>
+                  <div className="space-y-2.5 text-xs">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-4 h-4 bg-emerald-500/15 text-emerald-800 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">
+                        ✓
+                      </div>
+                      <p className="text-gray-700 leading-tight font-sans">
+                        <strong className="text-forest">Customer Email:</strong> Dispatched order confirmation to <span className="font-semibold text-forest font-mono break-all">{formData.email}</span>.
+                      </p>
+                    </div>
+
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-4 h-4 bg-emerald-500/15 text-emerald-800 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">
+                        ✓
+                      </div>
+                      <p className="text-gray-700 leading-tight font-sans">
+                        <strong className="text-forest">Admin Desk:</strong> Forwarded new purchase coordinates to <span className="font-semibold text-forest font-mono break-all font-bold">info@amlorawellness.com</span>.
+                      </p>
+                    </div>
+
+                    {serverDeliveryStatus?.isSimulated && (
+                      <div className="mt-2 bg-amber-500/10 border border-amber-500/20 text-amber-900 rounded-lg p-2.5 text-[10px] leading-relaxed">
+                        <span className="font-bold">Sandbox Mode active:</span> Email alerts simulated. Custom SMTP secrets are ready to connect inside your environment logs!
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="bg-white rounded-xl border border-forest/10 p-4 max-w-sm mx-auto shadow-xs text-left text-xs space-y-2.5 font-mono text-gray-700">
@@ -541,7 +595,7 @@ export default function CartDrawer() {
                   <div className="flex justify-between">
                     <span>Shipping Address:</span>
                     <span className="font-semibold font-sans text-right max-w-[200px] leading-tight select-all">
-                      {formData.address}, {formData.city} - {formData.pincode}
+                      {formData.address}, {formData.city}, {formData.state} - {formData.pincode}
                     </span>
                   </div>
                   <div className="flex justify-between border-t border-gray-100 pt-1.5 font-sans font-extrabold text-sm text-forest">
@@ -554,9 +608,6 @@ export default function CartDrawer() {
                   <div className="scale-75 flex justify-center opacity-85">
                     <AmlaLogo height={36} />
                   </div>
-                  <p className="text-[10px] text-gray-500 mt-2">
-                    Confirmation SMS/Email dispatched to <strong>{formData.phone}</strong> & <strong>{formData.email}</strong>.
-                  </p>
                 </div>
 
                 <button
@@ -568,7 +619,11 @@ export default function CartDrawer() {
               </div>
             ) : (
               /* Checkout Form */
-              <form onSubmit={handleCheckoutSubmit} className="p-6 overflow-y-auto space-y-4 flex-1 text-left bg-cream">
+              <form 
+                onSubmit={handleCheckoutSubmit} 
+                className="p-6 overflow-y-auto space-y-4 flex-1 text-left bg-cream"
+                autoComplete="off"
+              >
                 <div className="bg-emerald-rich/5 border border-emerald-rich/10 rounded-xl p-3.5 flex justify-between items-center text-xs text-forest">
                   <div>
                     <p className="font-semibold text-[13px]">Ordering signature Amla products</p>
@@ -594,8 +649,9 @@ export default function CartDrawer() {
                         required
                         value={formData.name}
                         onChange={handleInputChange}
+                        autoComplete="new-password"
                         className="w-full p-2.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-forest bg-white"
-                        placeholder="Vijay Sharma"
+                        placeholder="Enter full name"
                       />
                       {formErrors.name && (
                         <p className="text-red-600 text-[10px] mt-0.5 font-medium">{formErrors.name}</p>
@@ -612,8 +668,9 @@ export default function CartDrawer() {
                         maxLength={10}
                         value={formData.phone}
                         onChange={handleInputChange}
+                        autoComplete="new-password"
                         className="w-full p-2.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-forest bg-white"
-                        placeholder="7011369663"
+                        placeholder="Enter 10-digit mobile"
                       />
                       {formErrors.phone && (
                         <p className="text-red-600 text-[10px] mt-0.5 font-medium">{formErrors.phone}</p>
@@ -631,8 +688,9 @@ export default function CartDrawer() {
                       required
                       value={formData.email}
                       onChange={handleInputChange}
+                      autoComplete="new-password"
                       className="w-full p-2.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-forest bg-white"
-                      placeholder="customer@amlorawellness.com"
+                      placeholder="Enter email address"
                     />
                     {formErrors.email && (
                       <p className="text-red-600 text-[10px] mt-0.5 font-medium">{formErrors.email}</p>
@@ -653,18 +711,19 @@ export default function CartDrawer() {
                       rows={2}
                       value={formData.address}
                       onChange={handleInputChange}
+                      autoComplete="new-password"
                       className="w-full p-2.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-forest bg-white"
-                      placeholder="Moti Nagar, Near Pratapgarh Orchard Gates"
+                      placeholder="Enter flat, building, street, landmark details"
                     />
                     {formErrors.address && (
                       <p className="text-red-600 text-[10px] mt-0.5 font-medium">{formErrors.address}</p>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-forest mb-1">
-                        City / District *
+                        City *
                       </label>
                       <input
                         type="text"
@@ -672,8 +731,9 @@ export default function CartDrawer() {
                         required
                         value={formData.city}
                         onChange={handleInputChange}
+                        autoComplete="new-password"
                         className="w-full p-2.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-forest bg-white"
-                        placeholder="Pratapgarh"
+                        placeholder="Enter City"
                       />
                       {formErrors.city && (
                         <p className="text-red-600 text-[10px] mt-0.5 font-semibold">{formErrors.city}</p>
@@ -681,22 +741,42 @@ export default function CartDrawer() {
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-forest mb-1">
-                        Pincode (6 digits) *
+                        State *
                       </label>
                       <input
                         type="text"
-                        name="pincode"
+                        name="state"
                         required
-                        maxLength={6}
-                        value={formData.pincode}
+                        value={formData.state || ""}
                         onChange={handleInputChange}
+                        autoComplete="new-password"
                         className="w-full p-2.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-forest bg-white"
-                        placeholder="230403"
+                        placeholder="Enter State"
                       />
-                      {formErrors.pincode && (
-                        <p className="text-red-600 text-[10px] mt-0.5 font-medium">{formErrors.pincode}</p>
+                      {formErrors.state && (
+                        <p className="text-red-600 text-[10px] mt-0.5 font-semibold">{formErrors.state}</p>
                       )}
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-forest mb-1">
+                      Pincode (6 digits) *
+                    </label>
+                    <input
+                      type="text"
+                      name="pincode"
+                      required
+                      maxLength={6}
+                      value={formData.pincode}
+                      onChange={handleInputChange}
+                      autoComplete="new-password"
+                      className="w-full p-2.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-forest bg-white"
+                      placeholder="Enter 6-digit Pincode"
+                    />
+                    {formErrors.pincode && (
+                      <p className="text-red-600 text-[10px] mt-0.5 font-medium">{formErrors.pincode}</p>
+                    )}
                   </div>
 
                   {/* Payment Method Selector */}
