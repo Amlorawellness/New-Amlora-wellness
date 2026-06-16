@@ -86,6 +86,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: a
             user: smtpUser,
             pass: smtpPass,
           },
+          tls: {
+            rejectUnauthorized: false
+          }
         });
 
         // Test SMTP Connection before sending email

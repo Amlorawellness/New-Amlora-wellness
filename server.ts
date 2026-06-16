@@ -288,18 +288,25 @@ app.post("/api/orders", async (req, res) => {
     const smtpPass = process.env.SMTP_PASS;
     const smtpFrom = process.env.SMTP_FROM;
 
-    console.log("[SMTP CONFIG VERIFICATION] Verifying environment variables...");
-    console.log(`- SMTP_HOST: ${smtpHost ? `"${smtpHost}"` : "MISSING (Verify configuration)"}`);
-    console.log(`- SMTP_PORT: ${smtpPort ? `"${smtpPort}"` : "MISSING (Verify configuration)"}`);
-    console.log(`- SMTP_SECURE: ${smtpSecure ? `"${smtpSecure}"` : "MISSING (Verify configuration)"}`);
-    console.log(`- SMTP_USER: ${smtpUser ? `"${smtpUser}"` : "MISSING (Verify configuration)"}`);
-    console.log(`- SMTP_PASS: ${smtpPass ? `DEFINED (length: ${smtpPass.length})` : "MISSING (Verify configuration)"}`);
-    console.log(`- SMTP_FROM: ${smtpFrom ? `"${smtpFrom}"` : "MISSING (Verify configuration)"}`);
+    const logDiag = (msg: string) => {
+      console.log(msg);
+      try {
+        fs.appendFileSync(path.join(process.cwd(), "server_status.log"), `[SMTP-DIAG] ${new Date().toISOString()} - ${msg}\n`);
+      } catch (err) {}
+    };
+
+    logDiag("Verifying environment variables...");
+    logDiag(`- SMTP_HOST: ${smtpHost ? `"${smtpHost}"` : "MISSING"}`);
+    logDiag(`- SMTP_PORT: ${smtpPort ? `"${smtpPort}"` : "MISSING"}`);
+    logDiag(`- SMTP_SECURE: ${smtpSecure ? `"${smtpSecure}"` : "MISSING"}`);
+    logDiag(`- SMTP_USER: ${smtpUser ? `"${smtpUser}"` : "MISSING"}`);
+    logDiag(`- SMTP_PASS: ${smtpPass ? `DEFINED (length: ${smtpPass.length})` : "MISSING"}`);
+    logDiag(`- SMTP_FROM: ${smtpFrom ? `"${smtpFrom}"` : "MISSING"}`);
 
     const isSmtpConfigured = !!(smtpHost && smtpUser && smtpPass);
 
     if (isSmtpConfigured) {
-      console.log("[SMTP SEND START] Creating transporter to connect to secure mail server...");
+      logDiag("Creating transporter with TLS rejectUnauthorized=false...");
       try {
         const transporter = nodemailer.createTransport({
           host: smtpHost,
@@ -309,12 +316,15 @@ app.post("/api/orders", async (req, res) => {
             user: smtpUser,
             pass: smtpPass,
           },
+          tls: {
+            rejectUnauthorized: false
+          }
         });
 
         // Test SMTP Connection before sending email
-        console.log("[SMTP CONNECTION STATUS] Authenticating & testing connection to SMTP server...");
+        logDiag("Authenticating & testing connection to SMTP server...");
         await transporter.verify();
-        console.log("[SMTP CONNECTION STATUS] SMTP Connection Verified Successfully!");
+        logDiag("SMTP Connection Verified Successfully!");
 
         // Send customer email to the email entered during checkout
         const customerMailOptions = {
@@ -323,10 +333,10 @@ app.post("/api/orders", async (req, res) => {
           subject: "Your Amlora Wellness Order Has Been Confirmed",
           html: customerEmailHtml,
         };
-        console.log(`[SMTP SEND START] Dispatching confirmation email to customer at: ${email}`);
+        logDiag(`Dispatching confirmation email to customer at: ${email}`);
         await transporter.sendMail(customerMailOptions);
         customerMailSent = true;
-        console.log(`[SMTP SEND SUCCESS] Customer confirmation email sent successfully to ${email}`);
+        logDiag(`Customer confirmation email sent successfully to ${email}`);
 
         // Send admin email to info@amlorawellness.com
         const adminMailOptions = {
@@ -335,18 +345,18 @@ app.post("/api/orders", async (req, res) => {
           subject: "New Order Received - Amlora Wellness",
           html: adminEmailHtml,
         };
-        console.log(`[SMTP SEND START] Dispatching alert email to admin at: info@amlorawellness.com`);
+        logDiag("Dispatching alert email to admin at: info@amlorawellness.com");
         await transporter.sendMail(adminMailOptions);
         adminMailSent = true;
-        console.log(`[SMTP SEND SUCCESS] Admin alert email sent successfully to info@amlorawellness.com`);
+        logDiag("Admin alert email sent successfully to info@amlorawellness.com");
 
       } catch (mailErr: any) {
-        console.error("[SMTP SEND FAILURE] Email pipeline error caught!");
-        console.error("Exact SMTP Error:", mailErr);
+        logDiag(`[SMTP SEND FAILURE] Email pipeline error caught!`);
+        logDiag(`Exact SMTP Error: ${mailErr.stack || mailErr.message || String(mailErr)}`);
         mailErrorDiagnostic = mailErr.stack || mailErr.message || String(mailErr);
       }
     } else {
-      console.warn("[SMTP CONFIG VERIFICATION] FAILED: Missing one or more required SMTP variables.");
+      logDiag("FAILED: Missing one or more required SMTP variables.");
       mailErrorDiagnostic = "SMTP parameters are not fully configured in environment.";
     }
 

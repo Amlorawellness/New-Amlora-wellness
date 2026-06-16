@@ -599,6 +599,12 @@ export default function CartDrawer() {
                         <span className="font-bold">Sandbox Mode active:</span> Email alerts simulated. Custom SMTP secrets are ready to connect inside your environment logs!
                       </div>
                     )}
+
+                    {serverDeliveryStatus?.emailError && (
+                      <div className="mt-2 bg-rose-500/10 border border-rose-500/20 text-rose-900 rounded-lg p-2.5 text-[10px] leading-relaxed">
+                        <span className="font-bold text-rose-700">emailError:</span> {serverDeliveryStatus.emailError}
+                      </div>
+                    )}
                   </div>
                 </div>
 

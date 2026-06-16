@@ -113,18 +113,25 @@ export default defineConfig(() => {
                 const smtpPass = process.env.SMTP_PASS;
                 const smtpFrom = process.env.SMTP_FROM;
 
-                console.log("[SMTP CONFIG VERIFICATION - VITE DEV] Verifying environment variables...");
-                console.log(`- SMTP_HOST: ${smtpHost ? `"${smtpHost}"` : "MISSING (Verify configuration)"}`);
-                console.log(`- SMTP_PORT: ${smtpPort ? `"${smtpPort}"` : "MISSING (Verify configuration)"}`);
-                console.log(`- SMTP_SECURE: ${smtpSecure ? `"${smtpSecure}"` : "MISSING (Verify configuration)"}`);
-                console.log(`- SMTP_USER: ${smtpUser ? `"${smtpUser}"` : "MISSING (Verify configuration)"}`);
-                console.log(`- SMTP_PASS: ${smtpPass ? `DEFINED (length: ${smtpPass.length})` : "MISSING (Verify configuration)"}`);
-                console.log(`- SMTP_FROM: ${smtpFrom ? `"${smtpFrom}"` : "MISSING (Verify configuration)"}`);
+                const logDiag = (msg: string) => {
+                  console.log(msg);
+                  try {
+                    fs.appendFileSync(path.join(process.cwd(), "server_status.log"), `[VITE-SMTP-DIAG] ${new Date().toISOString()} - ${msg}\n`);
+                  } catch (err) {}
+                };
+
+                logDiag("Verifying environment variables...");
+                logDiag(`- SMTP_HOST: ${smtpHost ? `"${smtpHost}"` : "MISSING"}`);
+                logDiag(`- SMTP_PORT: ${smtpPort ? `"${smtpPort}"` : "MISSING"}`);
+                logDiag(`- SMTP_SECURE: ${smtpSecure ? `"${smtpSecure}"` : "MISSING"}`);
+                logDiag(`- SMTP_USER: ${smtpUser ? `"${smtpUser}"` : "MISSING"}`);
+                logDiag(`- SMTP_PASS: ${smtpPass ? `DEFINED (length: ${smtpPass.length})` : "MISSING"}`);
+                logDiag(`- SMTP_FROM: ${smtpFrom ? `"${smtpFrom}"` : "MISSING"}`);
 
                 const isSmtpConfigured = !!(smtpHost && smtpUser && smtpPass);
 
                 if (isSmtpConfigured) {
-                  console.log("[SMTP SEND START - VITE DEV] Creating transporter to connect to secure mail server...");
+                  logDiag("Creating transporter with TLS rejectUnauthorized=false...");
                   try {
                     const transporter = nodemailer.createTransport({
                       host: smtpHost,
@@ -134,12 +141,15 @@ export default defineConfig(() => {
                         user: smtpUser,
                         pass: smtpPass,
                       },
+                      tls: {
+                        rejectUnauthorized: false
+                      }
                     });
 
                     // Test SMTP Connection before sending email
-                    console.log("[SMTP CONNECTION STATUS - VITE DEV] Authenticating & testing connection to SMTP server...");
+                    logDiag("Authenticating & testing connection to SMTP server...");
                     await transporter.verify();
-                    console.log("[SMTP CONNECTION STATUS - VITE DEV] SMTP Connection Verified Successfully!");
+                    logDiag("SMTP Connection Verified Successfully!");
 
                     // Build standard layout HTML emails (matches server.ts layout)
                     const productListHtml = newOrder.items.map((item: any) => `
@@ -233,7 +243,7 @@ export default defineConfig(() => {
                     `;
 
                     // Send customer email to the email entered during checkout
-                    console.log(`[SMTP SEND START - VITE DEV] Dispatching confirmation email to customer at: ${email}`);
+                    logDiag(`Dispatching confirmation email to customer at: ${email}`);
                     await transporter.sendMail({
                       from: smtpFrom || `"Amlora Wellness" <${smtpUser}>`,
                       to: email,
@@ -241,11 +251,11 @@ export default defineConfig(() => {
                       html: customerEmailHtml,
                     });
                     customerMailSent = true;
-                    console.log(`[SMTP SEND SUCCESS - VITE DEV] Customer confirmation email sent successfully to ${email}`);
+                    logDiag(`Customer confirmation email sent successfully to ${email}`);
 
                     // Send admin email to info@amlorawellness.com
                     const adminEmailHtml = `<h3>New Order Received - ${orderId} from ${name} of ₹${cartTotal}</h3>`;
-                    console.log(`[SMTP SEND START - VITE DEV] Dispatching alert email to admin at: info@amlorawellness.com`);
+                    logDiag(`Dispatching alert email to admin at: info@amlorawellness.com`);
                     await transporter.sendMail({
                       from: smtpFrom || `"Amlora Sourcing Alert" <${smtpUser}>`,
                       to: "info@amlorawellness.com",
@@ -253,15 +263,15 @@ export default defineConfig(() => {
                       html: adminEmailHtml,
                     });
                     adminMailSent = true;
-                    console.log(`[SMTP SEND SUCCESS - VITE DEV] Admin alert email sent successfully to info@amlorawellness.com`);
+                    logDiag(`Admin alert email sent successfully to info@amlorawellness.com`);
 
                   } catch (mailErr: any) {
-                    console.error("[SMTP SEND FAILURE - VITE DEV] Email pipeline error caught!");
-                    console.error("Exact SMTP Error:", mailErr);
+                    logDiag(`[SMTP SEND FAILURE - VITE DEV] Email pipeline error caught!`);
+                    logDiag(`Exact SMTP Error: ${mailErr.stack || mailErr.message || String(mailErr)}`);
                     mailErrorDiagnostic = mailErr.stack || mailErr.message || String(mailErr);
                   }
                 } else {
-                  console.warn("[SMTP CONFIG VERIFICATION - VITE DEV] FAILED: Missing one or more required SMTP variables.");
+                  logDiag("FAILED: Missing one or more required SMTP variables.");
                   mailErrorDiagnostic = "SMTP parameters are not fully configured.";
                 }
 
