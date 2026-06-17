@@ -266,20 +266,21 @@ app.post("/api/orders", async (req, res) => {
       console.log(`[SUPABASE CLOUD SAVE] Writing order sequential ID to database: ${orderId}`);
       
       const orderPayload = {
-        order_id: orderId,
-        customer_name: name,
-        phone: phone,
-        email: email,
-        address: `${address}, ${city}, ${state} - ${pincode}`,
-        city: city,
-        state: state,
-        pincode: pincode,
-        payment_method: paymentMethod === "cod" ? "cod" : "razorpay",
-        payment_status: "Pending", // Direct user requirement
-        order_status: "New", // Direct user requirement
+        order_number: orderId,
         total_amount: Number(cartTotal),
-        items: newOrder.items,
-        razorpay_order_id: razorpayId || null
+        payment_method: paymentMethod === "cod" ? "cod" : "prepaid",
+        payment_status: paymentMethod === "cod" ? "unpaid" : "paid",
+        order_status: "pending",
+        shipping_address_snapshot: {
+          name,
+          phone,
+          email,
+          address,
+          city,
+          state,
+          pincode,
+          razorpay_order_id: razorpayId || null
+        }
       };
 
       let { data: insertedOrder, error: dbErr } = await supabaseAdmin
@@ -287,24 +288,6 @@ app.post("/api/orders", async (req, res) => {
         .insert(orderPayload)
         .select()
         .single();
-
-      // Resilience Fallback: standard lowercase checks matching older Postgres check constraints ("pending", "unpaid")
-      if (dbErr && (dbErr.message?.includes("check constraint") || dbErr.code === "23514")) {
-        console.warn("[SUPABASE CLOUD SAVE] Constraint boundary triggered on 'Pending' / 'New'. Retrying insertion using lowercases...");
-        const fallbackPayload = {
-          ...orderPayload,
-          payment_status: "unpaid",
-          order_status: "pending"
-        };
-        const { data: fallbackOrder, error: fallbackErr } = await supabaseAdmin
-          .from("orders")
-          .insert(fallbackPayload)
-          .select()
-          .single();
-        
-        insertedOrder = fallbackOrder;
-        dbErr = fallbackErr;
-      }
 
       if (dbErr) {
         console.error("[SUPABASE CLOUD SAVE WARNING] Parent order insert failed:", dbErr);

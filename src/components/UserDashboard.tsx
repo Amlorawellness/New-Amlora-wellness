@@ -63,8 +63,8 @@ export default function UserDashboard({ user, onLogout, onNavigateToAdmin }: Use
       // 2. Fetch User Orders
       const { data: ordData, error: ordErr } = await supabase
         .from("orders")
-        .select("*")
-        .eq("email", user.email);
+        .select("*, order_items(*)")
+        .eq("shipping_address_snapshot->>email", user.email);
 
       if (ordErr) throw ordErr;
       setOrders(ordData || []);
@@ -212,14 +212,14 @@ export default function UserDashboard({ user, onLogout, onNavigateToAdmin }: Use
                 <div className="space-y-4">
                   {orders.map((ord: any) => (
                     <div 
-                      key={ord.id || ord.orderId}
+                      key={ord.id || ord.order_number || ord.orderId}
                       className="border border-[#0F3D2E]/10 rounded-xl overflow-hidden shadow-sm hover:border-[#D4AF37]/30 transition-all font-sans"
                     >
                       {/* Order Core Details */}
                       <div className="bg-[#FAF9F5] p-4 flex flex-wrap justify-between items-center gap-2 border-b border-[#0F3D2E]/5">
                         <div className="space-y-1">
                           <p className="text-[11px] text-gray-500 font-mono">REFERENCE ID</p>
-                          <p className="text-xs font-bold text-[#0F3D2E] font-mono">{ord.order_id || ord.orderId}</p>
+                          <p className="text-xs font-bold text-[#0F3D2E] font-mono">{ord.order_number || ord.order_id || ord.orderId}</p>
                         </div>
                         <div className="space-y-1 text-center">
                           <p className="text-[11px] text-gray-500 font-mono">PLACED ON</p>
@@ -254,16 +254,20 @@ export default function UserDashboard({ user, onLogout, onNavigateToAdmin }: Use
                         <div className="divide-y divide-[#0F3D2E]/5">
                           {(() => {
                             let itemsArray = [];
-                            try {
-                              itemsArray = typeof ord.items === "string" ? JSON.parse(ord.items) : ord.items;
-                            } catch {
-                              itemsArray = [];
+                            if (ord.order_items && ord.order_items.length > 0) {
+                              itemsArray = ord.order_items;
+                            } else {
+                              try {
+                                itemsArray = typeof ord.items === "string" ? JSON.parse(ord.items) : ord.items;
+                              } catch {
+                                itemsArray = [];
+                              }
                             }
                             if (!Array.isArray(itemsArray)) itemsArray = [];
                             return itemsArray.map((item: any, idx: number) => (
                               <div key={idx} className="flex justify-between py-2 text-xs">
                                 <div>
-                                  <span className="font-bold">{item.name}</span>
+                                  <span className="font-bold">{item.product_name_snapshot || item.name}</span>
                                   <span className="text-gray-500 font-mono ml-2">x{item.quantity}</span>
                                 </div>
                                 <span className="font-semibold text-gray-700">₹{item.total || (item.price * item.quantity)}</span>

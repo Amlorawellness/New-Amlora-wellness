@@ -66,7 +66,7 @@ export default function AdminPanel({ onBackToDashboard }: AdminPanelProps) {
       setProducts(pData || []);
 
       // Orders
-      const { data: oData } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
+      const { data: oData } = await supabase.from("orders").select("*, order_items(*)").order("created_at", { ascending: false });
       setOrders(oData || []);
 
       // Coupons
@@ -711,7 +711,7 @@ export default function AdminPanel({ onBackToDashboard }: AdminPanelProps) {
                       <tr key={ord.id} className="hover:bg-slate-50 border-gray-50">
                         {/* Reference Metadata */}
                         <td className="px-6 py-4 space-y-1 align-top font-sans">
-                          <p className="font-mono font-bold text-[#0F3D2E] text-xs">{ord.order_id || ord.orderId}</p>
+                          <p className="font-mono font-bold text-[#0F3D2E] text-xs">{ord.order_number || ord.order_id || ord.orderId}</p>
                           <p className="text-[10px] text-gray-400 font-light">{new Date(ord.created_at || ord.orderDate).toLocaleString("en-IN")}</p>
                           <p className="inline-block text-[9px] uppercase tracking-wider font-bold text-slate-400 border border-slate-200 px-2.5 py-0.5 rounded-full bg-[#FAF9F5]">
                             {ord.payment_method === "cod" ? "COD Mode" : "Digital Pay"}
@@ -720,10 +720,12 @@ export default function AdminPanel({ onBackToDashboard }: AdminPanelProps) {
 
                         {/* Customer Information */}
                         <td className="px-6 py-4 space-y-1 align-top font-sans text-xs">
-                          <p className="font-bold">{ord.customer_name || ord.customerName}</p>
-                          <p className="text-gray-500 font-mono text-[11px]">{ord.email}</p>
-                          <p className="text-gray-500 font-mono text-[11px]">{ord.phone}</p>
-                          <p className="text-gray-400 leading-tight italic max-w-xs">{ord.address}, {ord.city} ({ord.pincode})</p>
+                          <p className="font-bold">{ord.customer_name || ord.customerName || ord.shipping_address_snapshot?.customer_name || ord.shipping_address_snapshot?.name || "Patron"}</p>
+                          <p className="text-gray-500 font-mono text-[11px]">{ord.email || ord.shipping_address_snapshot?.email}</p>
+                          <p className="text-gray-500 font-mono text-[11px]">{ord.phone || ord.shipping_address_snapshot?.phone}</p>
+                          <p className="text-gray-400 leading-tight italic max-w-xs">
+                            {ord.address || ord.shipping_address_snapshot?.address || ord.shipping_address_snapshot?.address_line}, {ord.city || ord.shipping_address_snapshot?.city} ({ord.pincode || ord.shipping_address_snapshot?.pincode})
+                          </p>
                         </td>
 
                         {/* Products Basket Items */}
@@ -731,15 +733,19 @@ export default function AdminPanel({ onBackToDashboard }: AdminPanelProps) {
                           <div className="divide-y divide-dotted divide-gray-200 space-y-1">
                             {(() => {
                               let subItems = [];
-                              try {
-                                subItems = typeof ord.items === "string" ? JSON.parse(ord.items) : ord.items;
-                              } catch {
-                                subItems = [];
+                              if (ord.order_items && ord.order_items.length > 0) {
+                                subItems = ord.order_items;
+                              } else {
+                                try {
+                                  subItems = typeof ord.items === "string" ? JSON.parse(ord.items) : ord.items;
+                                } catch {
+                                  subItems = [];
+                                }
                               }
                               if (!Array.isArray(subItems)) subItems = [];
                               return subItems.map((item: any, idx: number) => (
                                 <div key={idx} className="text-[11px]">
-                                  <span className="font-bold">{item.name}</span>{" "}
+                                  <span className="font-bold">{item.product_name_snapshot || item.name}</span>{" "}
                                   <span className="text-gray-400 font-mono text-[10px] font-bold">x{item.quantity}</span>
                                 </div>
                               ));
@@ -756,7 +762,7 @@ export default function AdminPanel({ onBackToDashboard }: AdminPanelProps) {
                         <td className="px-6 py-4 text-center align-top pt-4">
                           <select 
                             value={ord.payment_status || "unpaid"}
-                            onChange={(e) => handleUpdatePaymentStatus(ord.order_id || ord.orderId, ord.id, e.target.value)}
+                            onChange={(e) => handleUpdatePaymentStatus(ord.order_number || ord.order_id || ord.orderId, ord.id, e.target.value)}
                             className="bg-white border text-[11px] rounded p-1 outline-none font-bold text-[#0F3D2E] tracking-tight focus:ring-1 focus:ring-[#D4AF37]"
                           >
                             <option value="unpaid">Unpaid / Wait</option>
@@ -770,7 +776,7 @@ export default function AdminPanel({ onBackToDashboard }: AdminPanelProps) {
                         <td className="px-6 py-4 text-center align-top pt-4">
                           <select 
                             value={ord.order_status || "pending"}
-                            onChange={(e) => handleUpdateOrderStatus(ord.order_id || ord.orderId, ord.id, e.target.value)}
+                            onChange={(e) => handleUpdateOrderStatus(ord.order_number || ord.order_id || ord.orderId, ord.id, e.target.value)}
                             className="bg-[#FAF9F5] border text-[11px] rounded p-1 outline-none font-bold text-[#D4AF37] tracking-tight focus:ring-1 focus:ring-[#0F3D2E]"
                           >
                             <option value="pending">⚙ Pending</option>
