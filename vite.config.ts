@@ -106,12 +106,12 @@ export default defineConfig(() => {
                 let mailErrorDiagnostic = "";
 
                 // Check & Log Environment Variables (without exposing pass)
-                const smtpHost = process.env.SMTP_HOST;
-                const smtpPort = process.env.SMTP_PORT;
-                const smtpSecure = process.env.SMTP_SECURE;
-                const smtpUser = process.env.SMTP_USER;
-                const smtpPass = process.env.SMTP_PASS;
-                const smtpFrom = process.env.SMTP_FROM;
+                const smtpHost = process.env.SMTP_HOST || process.env.VITE_SMTP_HOST;
+                const smtpPort = process.env.SMTP_PORT || process.env.VITE_SMTP_PORT;
+                const smtpSecure = process.env.SMTP_SECURE || process.env.VITE_SMTP_SECURE;
+                const smtpUser = process.env.SMTP_USER || process.env.VITE_SMTP_USER;
+                const smtpPass = process.env.SMTP_PASS || process.env.VITE_SMTP_PASS;
+                const smtpFrom = process.env.SMTP_FROM || process.env.VITE_SMTP_FROM;
 
                 const logDiag = (msg: string) => {
                   console.log(msg);
@@ -272,7 +272,11 @@ export default defineConfig(() => {
                   }
                 } else {
                   logDiag("FAILED: Missing one or more required SMTP variables.");
-                  mailErrorDiagnostic = "SMTP parameters are not fully configured.";
+                  const missing = [];
+                  if (!smtpHost) missing.push("SMTP_HOST / VITE_SMTP_HOST");
+                  if (!smtpUser) missing.push("SMTP_USER / VITE_SMTP_USER");
+                  if (!smtpPass) missing.push("SMTP_PASS / VITE_SMTP_PASS");
+                  mailErrorDiagnostic = `SMTP parameters are not fully configured. Missing variables: ${missing.join(", ")}. Please configure these inside your AI Studio Environment Variables.`;
                 }
 
                 res.statusCode = 200;

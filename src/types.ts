@@ -22,6 +22,7 @@ export interface Product {
   id: string;
   name: string;
   type: string; // "powder" | "candy" | "cubes"
+  stock?: number;
   purityBadge: string;
   packagingType: string;
   netWeight: string;

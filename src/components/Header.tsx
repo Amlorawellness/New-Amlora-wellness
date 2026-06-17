@@ -11,9 +11,11 @@ import AmloraLogo from "./AmloraLogo";
 interface HeaderProps {
   activeTab?: string;
   setActiveTab?: (tab: string) => void;
+  user?: any;
+  onAuthClick?: () => void;
 }
 
-export default function Header({ activeTab = "home", setActiveTab }: HeaderProps) {
+export default function Header({ activeTab = "home", setActiveTab, user, onAuthClick }: HeaderProps) {
   const { setIsCartOpen, cartCount } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [announcementIndex, setAnnouncementIndex] = useState(0);
@@ -115,11 +117,29 @@ export default function Header({ activeTab = "home", setActiveTab }: HeaderProps
         </div>
 
         {/* Action button: Cart Icon and Secure FSSAI Seal */}
-        <div className="flex items-center gap-3 md:gap-5">
-          <div className="hidden lg:flex items-center gap-1.5 bg-black/20 px-3 py-1 border border-[#D4AF37]/20 text-[9px] uppercase tracking-[0.2em] font-bold text-[#F4E8C1]">
+        <div className="flex items-center gap-2 md:gap-4">
+          <div className="hidden xl:flex items-center gap-1.5 bg-black/20 px-3 py-1 border border-[#D4AF37]/20 text-[9px] uppercase tracking-[0.2em] font-bold text-[#F4E8C1]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] inline-block" />
             <span>FSSAI Certified</span>
           </div>
+
+          {user ? (
+            <button
+              onClick={() => handleTabClick("dashboard")}
+              className="px-3 py-2 border border-[#D4AF37]/35 text-[#D4AF37] hover:bg-[#D4AF37]/10 text-[10px] md:text-[11px] uppercase tracking-[0.12em] font-bold transition-all cursor-pointer bg-transparent"
+              id="header-user-account-btn"
+            >
+              👤 Profile
+            </button>
+          ) : (
+            <button
+              onClick={onAuthClick}
+              className="px-3 py-2 border border-[#D4AF37]/50 text-white hover:bg-[#D4AF37] hover:text-[#0F3D2E] text-[10px] md:text-[11px] uppercase tracking-[0.12em] font-bold transition-all cursor-pointer bg-transparent"
+              id="header-sign-in-btn"
+            >
+              Sign In
+            </button>
+          )}
 
           <button
             onClick={() => setIsCartOpen(true)}
@@ -154,6 +174,23 @@ export default function Header({ activeTab = "home", setActiveTab }: HeaderProps
               </button>
             );
           })}
+          
+          {user ? (
+            <button
+              onClick={() => handleTabClick("dashboard")}
+              className="text-[11px] uppercase tracking-[0.15em] font-bold text-left pb-2.5 border-b border-[#D4AF37]/15 text-[#D4AF37] bg-transparent cursor-pointer"
+            >
+              👤 Patron Profile Log
+            </button>
+          ) : (
+            <button
+              onClick={() => { setMobileMenuOpen(false); onAuthClick && onAuthClick(); }}
+              className="text-[11px] uppercase tracking-[0.15em] font-bold text-left pb-2.5 border-b border-[#D4AF37]/15 text-[#D4AF37] bg-transparent cursor-pointer"
+            >
+              🔑 Sign In / Sign Up
+            </button>
+          )}
+
           <div className="pt-2 flex items-center justify-between text-[10px] text-cream/50 uppercase tracking-widest">
             <span className="flex items-center gap-1 text-[#D4AF37]">🛡️ Lic: 30260226123537844</span>
             <span>Amlora Wellness</span>

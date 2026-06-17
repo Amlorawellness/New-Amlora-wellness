@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { CartProvider } from "./context/CartContext";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
@@ -19,6 +19,8 @@ import Footer from "./components/Footer";
 import CartDrawer from "./components/CartDrawer";
 import FloatingLeaves from "./components/FloatingLeaves";
 import { PRODUCTS } from "./data/products";
+import { Product } from "./types";
+import { mapSupabaseToProduct } from "./utils/productMapper";
 
 // New Pages
 import AboutPage from "./components/AboutPage";
@@ -26,8 +28,67 @@ import BenefitsPage from "./components/BenefitsPage";
 import BlogPage from "./components/BlogPage";
 import LoyaltyProgram from "./components/LoyaltyProgram";
 
+// Authentication & Core Persistence Layer
+import { supabase } from "./lib/supabaseClient";
+import AuthModal from "./components/AuthModal";
+import UserDashboard from "./components/UserDashboard";
+import AdminPanel from "./components/AdminPanel";
+
 export default function App() {
   const [activeTab, setActiveTabState] = useState<string>("home");
+  const [user, setUser] = useState<any>(null);
+  const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
+
+  // Supabase Product States
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchProducts = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const { data, error: fetchErr } = await supabase
+        .from("products")
+        .select("*");
+
+      if (fetchErr) {
+        throw fetchErr;
+      }
+
+      if (data && data.length > 0) {
+        const mapped = data.map((item: any) => mapSupabaseToProduct(item));
+        setProducts(mapped);
+      } else {
+        // Fallback to local high-fidelity list if database is empty 
+        // to prevent blank loading screens on brand new databases
+        const fallbackMapped = PRODUCTS.map((item) => mapSupabaseToProduct(item));
+        setProducts(fallbackMapped);
+      }
+    } catch (err: any) {
+      console.error("[Supabase Fetch Error]:", err);
+      setError(err.message || String(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Check initial user session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user || null);
+    });
+
+    // Listen to changes in auth state dynamically (login, signup, logouts)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    // Fetch products dynamically on layout mount
+    fetchProducts();
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const setActiveTab = (tabId: string) => {
     setActiveTabState(tabId);
@@ -41,7 +102,7 @@ export default function App() {
         <FloatingLeaves />
 
         {/* Header navigation bar */}
-        <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+        <Header activeTab={activeTab} setActiveTab={setActiveTab} user={user} onAuthClick={() => setIsAuthOpen(true)} />
 
         {/* Dynamic Main Workspace Rendering */}
         <main className="flex-grow">
@@ -76,10 +137,33 @@ export default function App() {
                   </div>
 
                   {/* Products grid showing all 3 premium products */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {PRODUCTS.map((prod) => (
-                      <ProductCard key={prod.id} product={prod} />
-                    ))}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 min-h-[300px]">
+                    {isLoading ? (
+                      <div className="col-span-full py-20 flex flex-col items-center justify-center space-y-4">
+                        <div className="w-12 h-12 border-4 border-[#0F3D2E]/20 border-t-[#D4AF37] rounded-full animate-spin" />
+                        <p className="text-xs font-mono uppercase tracking-widest text-[#0F3D2E]/75 animate-pulse">
+                          Retrieving Amlora Catalog...
+                        </p>
+                      </div>
+                    ) : error ? (
+                      <div className="col-span-full py-12 px-6 bg-[#FAF9F5] border border-amber-500/20 text-center max-w-xl mx-auto space-y-4">
+                        <span className="text-2xl">⚠️</span>
+                        <h4 className="font-serif text-[#0F3D2E] text-lg font-bold">Catalog Sync Error</h4>
+                        <p className="text-xs text-gray-500 font-light leading-relaxed">
+                          Could not load products from our Supabase inventory database. Error: {error}.
+                        </p>
+                        <button 
+                          onClick={fetchProducts}
+                          className="px-6 py-2.5 bg-[#0F3D2E] hover:bg-[#07241a] text-white text-[10px] font-bold uppercase tracking-wider transition-colors border border-[#D4AF37]/35 rounded-none cursor-pointer"
+                        >
+                          Retry Connection
+                        </button>
+                      </div>
+                    ) : (
+                      products.map((prod) => (
+                        <ProductCard key={prod.id} product={prod} />
+                      ))
+                    )}
                   </div>
                 </div>
               </section>
@@ -114,11 +198,34 @@ export default function App() {
               </section>
 
               {/* Main Sourcing Product Grid */}
-              <section className="py-20 max-w-7xl mx-auto px-6 md:px-12">
+              <section className="py-20 max-w-7xl mx-auto px-6 md:px-12 min-h-[300px]">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {PRODUCTS.map((prod) => (
-                    <ProductCard key={prod.id} product={prod} />
-                  ))}
+                  {isLoading ? (
+                    <div className="col-span-full py-20 flex flex-col items-center justify-center space-y-4">
+                      <div className="w-12 h-12 border-4 border-[#0F3D2E]/20 border-t-[#D4AF37] rounded-full animate-spin" />
+                      <p className="text-xs font-mono uppercase tracking-widest text-[#0F3D2E]/75 animate-pulse">
+                        Retrieving Amlora Catalog...
+                      </p>
+                    </div>
+                  ) : error ? (
+                    <div className="col-span-full py-12 px-6 bg-[#FAF9F5] border border-amber-500/20 text-center max-w-xl mx-auto space-y-4">
+                      <span className="text-2xl">⚠️</span>
+                      <h4 className="font-serif text-[#0F3D2E] text-lg font-bold">Catalog Sync Error</h4>
+                      <p className="text-xs text-gray-500 font-light leading-relaxed">
+                        Could not load products from our Supabase inventory database. Error: {error}.
+                      </p>
+                      <button 
+                        onClick={fetchProducts}
+                        className="px-6 py-2.5 bg-[#0F3D2E] hover:bg-[#07241a] text-white text-[10px] font-bold uppercase tracking-wider transition-colors border border-[#D4AF37]/35 rounded-none cursor-pointer"
+                      >
+                        Retry Connection
+                      </button>
+                    </div>
+                  ) : (
+                    products.map((prod) => (
+                      <ProductCard key={prod.id} product={prod} />
+                    ))
+                  )}
                 </div>
               </section>
 
@@ -161,6 +268,38 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {activeTab === "dashboard" && (
+            <div className="animate-[fadeIn_0.5s_ease-out]">
+              {user ? (
+                <UserDashboard 
+                  user={user} 
+                  onLogout={async () => {
+                    await supabase.auth.signOut();
+                    setActiveTab("home");
+                  }} 
+                  onNavigateToAdmin={() => setActiveTab("admin")}
+                />
+              ) : (
+                <div className="py-24 text-center max-w-md mx-auto px-6 space-y-6">
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-[#D4AF37] border border-[#D4AF37]/50 bg-[#D4AF37]/5 px-3.5 py-1.5 inline-block">🔒 SECURE GATEWAY</span>
+                  <p className="text-sm font-light text-gray-500">Please sign in to your registered patron account to access your booking registers, past orders, and address coordinates.</p>
+                  <button 
+                    onClick={() => setIsAuthOpen(true)}
+                    className="px-6 py-2.5 bg-[#0F3D2E] hover:bg-[#07241a] text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-colors shadow-lg"
+                  >
+                    Open Authorization Portal
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "admin" && (
+            <div className="animate-[fadeIn_0.5s_ease-out]">
+              <AdminPanel onBackToDashboard={() => setActiveTab("dashboard")} />
+            </div>
+          )}
         </main>
 
         {/* Global luxury footer */}
@@ -168,6 +307,16 @@ export default function App() {
 
         {/* Sticky Sliding Right-hand Shopping Cart Drawer */}
         <CartDrawer />
+
+        {/* Dynamic Auth Modal Dialog */}
+        <AuthModal 
+          isOpen={isAuthOpen}
+          onClose={() => setIsAuthOpen(false)} 
+          onSuccess={(u) => {
+            setIsAuthOpen(false);
+            setActiveTab("dashboard");
+          }} 
+        />
       </div>
     </CartProvider>
   );

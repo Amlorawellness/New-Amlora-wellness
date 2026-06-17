@@ -73,7 +73,7 @@ export default function Contact({ hideForm = false }: { hideForm?: boolean }) {
                   <div>
                     <h4 className="font-bold text-[#D4AF37] uppercase tracking-widest text-[9px] mb-1">Phone Helpline</h4>
                     <p className="text-cream/90 font-mono text-sm leading-none font-bold select-all">
-                      +91 7011369663
+                      +91 9451657345
                     </p>
                   </div>
                 </div>

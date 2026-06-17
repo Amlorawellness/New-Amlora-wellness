@@ -148,7 +148,7 @@ export default function Footer({ setActiveTab }: FooterProps) {
             </p>
             <p className="flex items-center gap-2">
               <Phone className="w-4 h-4 text-[#D4AF37] flex-shrink-0" />
-              <span className="font-mono text-[11px]">+91 7011369663</span>
+              <span className="font-mono text-[11px]">+91 9451657345</span>
             </p>
             <p className="flex items-center gap-2">
               <Mail className="w-4 h-4 text-[#D4AF37] flex-shrink-0" />
