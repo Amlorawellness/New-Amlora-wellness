@@ -262,26 +262,32 @@ app.post("/api/orders", async (req, res) => {
 
     // 2. Perform the exact database insertion into Orders & Order Items (Transact equivalent safe workflow)
     let insertedOrderRef: any = null;
+    let failureStage = "before the orders insert";
+    const orderPayload = {
+      order_number: orderId,
+      total_amount: Number(cartTotal),
+      payment_method: paymentMethod === "cod" ? "cod" : "prepaid",
+      payment_status: paymentMethod === "cod" ? "unpaid" : "paid",
+      order_status: "pending",
+      shipping_address_snapshot: {
+        name,
+        phone,
+        email,
+        address,
+        city,
+        state,
+        pincode,
+        razorpay_order_id: razorpayId || null
+      }
+    };
+
+    console.log(`[DIAGNOSTIC] Current Failure Stage: ${failureStage}`);
+    console.log(`[DIAGNOSTIC] Exact orders insert payload:\n`, JSON.stringify(orderPayload, null, 2));
+
     try {
-      console.log(`[SUPABASE CLOUD SAVE] Writing order sequential ID to database: ${orderId}`);
-      
-      const orderPayload = {
-        order_number: orderId,
-        total_amount: Number(cartTotal),
-        payment_method: paymentMethod === "cod" ? "cod" : "prepaid",
-        payment_status: paymentMethod === "cod" ? "unpaid" : "paid",
-        order_status: "pending",
-        shipping_address_snapshot: {
-          name,
-          phone,
-          email,
-          address,
-          city,
-          state,
-          pincode,
-          razorpay_order_id: razorpayId || null
-        }
-      };
+      failureStage = "during the orders insert";
+      console.log(`[DIAGNOSTIC] Current Failure Stage: ${failureStage}`);
+      console.log(`[SUPABASE CLOUD SAVE] Querying primary INSERT database request to public.orders table...`);
 
       let { data: insertedOrder, error: dbErr } = await supabaseAdmin
         .from("orders")
@@ -289,17 +295,35 @@ app.post("/api/orders", async (req, res) => {
         .select()
         .single();
 
+      console.log("[DIAGNOSTIC] Complete orders insert response:\n", JSON.stringify({ data: insertedOrder, error: dbErr }, null, 2));
+
       if (dbErr) {
-        console.error("[SUPABASE CLOUD SAVE WARNING] Parent order insert failed:", dbErr);
-        throw new Error(`Database orders insert failure: ${dbErr.message}`);
+        console.error("[DIAGNOSTIC DATABASE ERROR DETAILS]");
+        console.error(`- code:    `, dbErr.code);
+        console.error(`- message: `, dbErr.message);
+        console.error(`- details: `, dbErr.details);
+        console.error(`- hint:    `, dbErr.hint);
+
+        const diagnosticError: any = new Error(dbErr.message || "orders insert error");
+        diagnosticError.dbDetails = {
+          code: dbErr.code,
+          message: dbErr.message,
+          details: dbErr.details,
+          hint: dbErr.hint
+        };
+        throw diagnosticError;
       }
 
       if (!insertedOrder) {
         throw new Error("Retrieve order details returned empty");
       }
 
+      failureStage = "after the orders insert";
+      console.log(`[DIAGNOSTIC] Current Failure Stage: ${failureStage}`);
       insertedOrderRef = insertedOrder;
-      console.log(`[SUPABASE CLOUD SUCCESS] Parent order committed with UUID primary key: ${insertedOrder.id}`);
+
+      failureStage = "during the order_items insert";
+      console.log(`[DIAGNOSTIC] Current Failure Stage: ${failureStage}`);
 
       // Save each purchased product item into order_items with reference UUID
       const childItemsPayload = cartItems.map((item: any) => ({
@@ -311,26 +335,59 @@ app.post("/api/orders", async (req, res) => {
         quantity: Number(item.quantity)
       }));
 
-      console.log(`[SUPABASE CLOUD SAVE] Writing order items lists to database: ${childItemsPayload.length} rows`);
+      console.log(`[DIAGNOSTIC] Exact order_items insert payload:\n`, JSON.stringify(childItemsPayload, null, 2));
+
       const { error: itemsErr } = await supabaseAdmin
         .from("order_items")
         .insert(childItemsPayload);
 
+      console.log("[DIAGNOSTIC] Complete order_items insert response:\n", JSON.stringify({ error: itemsErr }, null, 2));
+
       if (itemsErr) {
-        console.error("[SUPABASE CLOUD SAVE] Child items insert failed. Initiating diagnostic transaction-equivalent rollback for order:", insertedOrder.id);
-        // Atomicity-guaranteeing rollback compensating transaction
+        console.error("[DIAGNOSTIC ERROR] Child items insert failed. Rollbacking parent:", insertedOrder.id);
         await supabaseAdmin.from("orders").delete().eq("id", insertedOrder.id);
-        throw new Error(`Database order_items insert failure: ${itemsErr.message}`);
+
+        console.error("[DIAGNOSTIC ORDER_ITEMS DATABASE ERROR DETAILS]");
+        console.error(`- code:    `, itemsErr.code);
+        console.error(`- message: `, itemsErr.message);
+        console.error(`- details: `, itemsErr.details);
+        console.error(`- hint:    `, itemsErr.hint);
+
+        const diagnosticError: any = new Error(itemsErr.message || "order_items insert error");
+        diagnosticError.dbDetails = {
+          code: itemsErr.code,
+          message: itemsErr.message,
+          details: itemsErr.details,
+          hint: itemsErr.hint
+        };
+        throw diagnosticError;
       }
 
       console.log("[SUPABASE CLOUD SUCCESS] Child order items list committed successfully. Consistency achieved.");
 
     } catch (supaTxErr: any) {
-      console.error("[SUPABASE TRANSACTION EXCEPTION]", supaTxErr);
-      return res.status(500).json({
+      console.error("[SUPABASE TRANSACTION EXCEPTION]");
+      console.error("- Message:", supaTxErr.message);
+      console.error("- Stack:", supaTxErr.stack);
+      if (supaTxErr.dbDetails) {
+        console.error("- PostgreSQL/Supabase raw properties:", JSON.stringify(supaTxErr.dbDetails, null, 2));
+      }
+
+      // Return ONLY raw/original Supabase/PostgreSQL error fields exactly inside error & details.
+      const errorResponse = {
         success: false,
-        error: `Supabase Order Transaction failed: ${supaTxErr.message || supaTxErr}`
-      });
+        error: supaTxErr.message || String(supaTxErr),
+        code: supaTxErr.dbDetails?.code,
+        details: supaTxErr.dbDetails?.details,
+        hint: supaTxErr.dbDetails?.hint,
+        stack: supaTxErr.stack,
+        diagnostic: {
+          failureStage: failureStage,
+          ordersPayloadSnapshot: orderPayload
+        }
+      };
+
+      return res.status(500).json(errorResponse);
     }
 
     // 2. Prepare Email Notification Templates (Customer & Admin)

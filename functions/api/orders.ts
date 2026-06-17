@@ -84,101 +84,70 @@ export async function onRequestPost({ request, env }: { request: Request; env: a
 
     // 4. Double Insertion - parent orders & child order_items
     let insertedOrderRef: any = null;
-    try {
-      console.log(`[CLOUDFLARE SUPABASE] Writing parent order sequence ID: ${orderId}`);
-
-      const orderPayload = {
-        order_number: orderId,
-        total_amount: Number(cartTotal),
-        payment_method: paymentMethod === "cod" ? "cod" : "prepaid",
-        payment_status: paymentMethod === "cod" ? "unpaid" : "paid",
-        order_status: "pending",
-        shipping_address_snapshot: {
-          name,
-          phone,
-          email,
-          address,
-          city,
-          state,
-          pincode,
-          razorpay_order_id: razorpayId || null
-        }
-      };
-
-      // --- COMPREHENSIVE SCHEMATIC TELEMETRY & PRE-FLIGHT AUDIT ---
-      console.log("[TELEMETRY] --- PRE-INSERTION SCHEMA AUDIT REPORT ---");
-      console.log(`[TELEMETRY] Exact payload to insert:\n${JSON.stringify(orderPayload, null, 2)}`);
-
-      const schemaAudit = {
-        order_number: { value: orderPayload.order_number, nullable: false, type: "TEXT", constraint: "UNIQUE NOT NULL", length: orderPayload.order_number?.length, ok: !!orderPayload.order_number },
-        payment_method: { value: orderPayload.payment_method, nullable: false, type: "TEXT", constraint: "CHECK IN ('cod', 'prepaid')", ok: ["cod", "prepaid"].includes(orderPayload.payment_method) },
-        payment_status: { value: orderPayload.payment_status, nullable: false, type: "TEXT", constraint: "CHECK IN ('unpaid', 'paid', 'refunded', 'failed')", ok: ["unpaid", "paid", "refunded", "failed"].includes(orderPayload.payment_status) },
-        order_status: { value: orderPayload.order_status, nullable: false, type: "TEXT", constraint: "CHECK IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled')", ok: ["pending", "processing", "shipped", "delivered", "cancelled"].includes(orderPayload.order_status) },
-        total_amount: { value: orderPayload.total_amount, nullable: false, type: "NUMERIC(10,2)", constraint: "CHECK (total_amount >= 0)", isNumber: typeof orderPayload.total_amount === "number", validValue: orderPayload.total_amount >= 0, ok: typeof orderPayload.total_amount === "number" && orderPayload.total_amount >= 0 },
-        shipping_address_snapshot: { value: typeof orderPayload.shipping_address_snapshot, nullable: false, type: "JSONB", isObject: typeof orderPayload.shipping_address_snapshot === "object", ok: !!orderPayload.shipping_address_snapshot }
-      };
-
-      console.log(`[TELEMETRY] Field-Check Validation Map:\n${JSON.stringify(schemaAudit, null, 2)}`);
-      
-      console.log("[TELEMETRY] Check: NOT NULL Constraints validation...");
-      const missingFields = Object.entries(schemaAudit).filter(([k, v]) => !v.ok).map(([k]) => k);
-      if (missingFields.length > 0) {
-        console.warn(`[TELEMETRY WARNING] Fields violating basic constraints: ${missingFields.join(", ")}`);
-      } else {
-        console.log("[TELEMETRY] NOT NULL Check: SUCCESSFUL.");
+    let failureStage = "before the orders insert";
+    const orderPayload = {
+      order_number: orderId,
+      total_amount: Number(cartTotal),
+      payment_method: paymentMethod === "cod" ? "cod" : "prepaid",
+      payment_status: paymentMethod === "cod" ? "unpaid" : "paid",
+      order_status: "pending",
+      shipping_address_snapshot: {
+        name,
+        phone,
+        email,
+        address,
+        city,
+        state,
+        pincode,
+        razorpay_order_id: razorpayId || null
       }
+    };
 
-      console.log("[TELEMETRY] Check: Foreign Key Constraints validation...");
-      console.log("- user_id: NULL (Guest Checkout is accepted and enabled).");
+    console.log(`[DIAGNOSTIC] Current Failure Stage: ${failureStage}`);
+    console.log(`[DIAGNOSTIC] Exact orders insert payload:\n`, JSON.stringify(orderPayload, null, 2));
 
-      console.log("[TELEMETRY] Check: RLS Policies validation...");
-      console.log("- Requires permissive RLS policy for insert/select statements.");
+    try {
+      failureStage = "during the orders insert";
+      console.log(`[DIAGNOSTIC] Current Failure Stage: ${failureStage}`);
+      console.log(`[CLOUDFLARE SUPABASE] Querying primary INSERT database request to public.orders table...`);
 
-      console.log("[TELEMETRY] Check: Enum/Check Constraints validation...");
-      console.log(`- payment_method: "${orderPayload.payment_method}" vs check constraint IN ('cod', 'prepaid')`);
-      console.log(`- payment_status: "${orderPayload.payment_status}" vs check constraint IN ('unpaid', 'paid', 'refunded', 'failed')`);
-      console.log(`- order_status: "${orderPayload.order_status}" vs check constraint IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled')`);
-      console.log("[TELEMETRY] ---------------------------------------------");
-
-      console.log(`[TELEMETRY] Querying primary INSERT database request to public.orders table...`);
       const insertResponse = await supabaseAdmin
         .from("orders")
         .insert(orderPayload)
         .select()
         .single();
 
-      console.log("[TELEMETRY] --- COMPLETE SUPABASE INSERTION RESPONSE ---");
-      console.log(JSON.stringify(insertResponse, null, 2));
+      console.log("[DIAGNOSTIC] Complete orders insert response:\n", JSON.stringify(insertResponse, null, 2));
 
-      let { data: insertedOrder, error: dbErr } = insertResponse;
-
-      if (dbErr) {
-        console.error("--- PRIMARY SUPABASE ERROR DETAILS ---");
-        console.error(`- error.code:    ${dbErr.code}`);
-        console.error(`- error.message: ${dbErr.message}`);
-        console.error(`- error.details: ${dbErr.details}`);
-        console.error(`- error.hint:    ${dbErr.hint}`);
-        console.error("--------------------------------------");
-      }
+      const { data: insertedOrder, error: dbErr } = insertResponse;
 
       if (dbErr) {
-        const richDbError: any = new Error(`Database orders insert failure: [code=${dbErr.code}] ${dbErr.message}`);
-        richDbError.dbDetails = {
+        console.error("[DIAGNOSTIC DATABASE ERROR DETAILS]");
+        console.error(`- code:    `, dbErr.code);
+        console.error(`- message: `, dbErr.message);
+        console.error(`- details: `, dbErr.details);
+        console.error(`- hint:    `, dbErr.hint);
+
+        const diagnosticError: any = new Error(dbErr.message || "orders insert error");
+        diagnosticError.dbDetails = {
           code: dbErr.code,
           message: dbErr.message,
           details: dbErr.details,
-          hint: dbErr.hint,
-          payloadInserted: orderPayload
+          hint: dbErr.hint
         };
-        throw richDbError;
+        throw diagnosticError;
       }
 
       if (!insertedOrder) {
         throw new Error("Retrieve order details returned empty state");
       }
 
+      failureStage = "after the orders insert";
+      console.log(`[DIAGNOSTIC] Current Failure Stage: ${failureStage}`);
       insertedOrderRef = insertedOrder;
-      console.log(`[CLOUDFLARE SUPABASE SUCCESS] Parent order committed: ${insertedOrder.id}`);
+
+      failureStage = "during the order_items insert";
+      console.log(`[DIAGNOSTIC] Current Failure Stage: ${failureStage}`);
 
       // Map and write children order items list
       const childItemsPayload = cartItems.map((item: any) => ({
@@ -190,51 +159,59 @@ export async function onRequestPost({ request, env }: { request: Request; env: a
         quantity: Number(item.quantity)
       }));
 
-      console.log(`[TELEMETRY] Querying INSERT database request to public.order_items table...`);
+      console.log(`[DIAGNOSTIC] Exact order_items insert payload:\n`, JSON.stringify(childItemsPayload, null, 2));
+
       const childResponse = await supabaseAdmin
         .from("order_items")
         .insert(childItemsPayload);
 
-      console.log("[TELEMETRY] --- COMPLETE SUPABASE CHILD ITEMS RESPONSE ---");
-      console.log(JSON.stringify(childResponse, null, 2));
+      console.log("[DIAGNOSTIC] Complete order_items insert response:\n", JSON.stringify(childResponse, null, 2));
 
       const { error: itemsErr } = childResponse;
 
       if (itemsErr) {
-        console.error("[CLOUDFLARE SUPABASE ERROR] Child items write failed. Rollbacking parent:", insertedOrder.id);
+        console.error("[DIAGNOSTIC ERROR] Child items insert failed. Rollbacking parent:", insertedOrder.id);
         await supabaseAdmin.from("orders").delete().eq("id", insertedOrder.id);
-        
-        console.error("--- ORDER_ITEMS SUPABASE ERROR DETAILS ---");
-        console.error(`- error.code:    ${itemsErr.code}`);
-        console.error(`- error.message: ${itemsErr.message}`);
-        console.error(`- error.details: ${itemsErr.details}`);
-        console.error(`- error.hint:    ${itemsErr.hint}`);
-        console.error("------------------------------------------");
 
-        const richItemsError: any = new Error(`Database order_items insert failure: [code=${itemsErr.code}] ${itemsErr.message}`);
-        richItemsError.dbDetails = {
+        console.error("[DIAGNOSTIC ORDER_ITEMS DATABASE ERROR DETAILS]");
+        console.error(`- code:    `, itemsErr.code);
+        console.error(`- message: `, itemsErr.message);
+        console.error(`- details: `, itemsErr.details);
+        console.error(`- hint:    `, itemsErr.hint);
+
+        const diagnosticError: any = new Error(itemsErr.message || "order_items insert error");
+        diagnosticError.dbDetails = {
           code: itemsErr.code,
           message: itemsErr.message,
           details: itemsErr.details,
-          hint: itemsErr.hint,
-          payloadInserted: childItemsPayload
+          hint: itemsErr.hint
         };
-        throw richItemsError;
+        throw diagnosticError;
       }
 
       console.log("[CLOUDFLARE SUPABASE SUCCESS] Consistency achieved. Sub-items linked.");
 
     } catch (dbTxError: any) {
-      console.error("[CLOUDFLARE DATABASE EXCEPTION]", dbTxError);
-      
-      const errorResponse: any = {
-        success: false,
-        error: dbTxError.message || String(dbTxError)
-      };
-
+      console.error("[CLOUDFLARE DATABASE EXCEPTION]");
+      console.error("- Message:", dbTxError.message);
+      console.error("- Stack:", dbTxError.stack);
       if (dbTxError.dbDetails) {
-        errorResponse.supabaseRawError = dbTxError.dbDetails;
+        console.error("- PostgreSQL/Supabase raw properties:", JSON.stringify(dbTxError.dbDetails, null, 2));
       }
+
+      // Return ONLY raw/original Supabase/PostgreSQL error fields exactly inside error & details.
+      const errorResponse = {
+        success: false,
+        error: dbTxError.message || String(dbTxError),
+        code: dbTxError.dbDetails?.code,
+        details: dbTxError.dbDetails?.details,
+        hint: dbTxError.dbDetails?.hint,
+        stack: dbTxError.stack,
+        diagnostic: {
+          failureStage: failureStage,
+          ordersPayloadSnapshot: orderPayload
+        }
+      };
 
       return new Response(JSON.stringify(errorResponse), {
         status: 500,
