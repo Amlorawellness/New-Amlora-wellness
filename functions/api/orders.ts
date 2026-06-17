@@ -1,3 +1,6 @@
+import { createClient } from "@supabase/supabase-js";
+import { Resend } from "resend";
+
 export async function onRequestPost({ request, env }: { request: Request; env: any }) {
   console.log("[CLOUDFLARE ENDPOINT] Order request received.");
   try {
@@ -26,8 +29,6 @@ export async function onRequestPost({ request, env }: { request: Request; env: a
     const supabaseUrl = env.VITE_SUPABASE_URL || "https://your-supabase-url.supabase.co";
     const supabaseServiceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY || "your_supabase_anon_key";
 
-    const supabaseModuleName = "@supabase/supabase-js";
-    const { createClient } = await import(supabaseModuleName);
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
         persistSession: false,
@@ -338,8 +339,6 @@ export async function onRequestPost({ request, env }: { request: Request; env: a
 
     if (resendApiKey) {
       try {
-        const resendModuleName = "resend";
-        const { Resend } = await import(resendModuleName);
         const resendInstance = new Resend(resendApiKey);
 
         // Send confirmation email to customer
